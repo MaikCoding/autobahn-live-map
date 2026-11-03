@@ -5,7 +5,7 @@
 
 **Alle offenen Verkehrsdaten der Autobahn GmbH auf einer Karte: Baustellen, Staus, Sperrungen, Ladesäulen und Lkw-Parkplätze, live aus der API, ohne Backend und ohne API-Key.** Die Daten sind seit Jahren frei abrufbar, aber verteilt auf 113 Autobahnen und fünf Dienste; dieses Projekt holt sie zusammen und rechnet ein wenig damit.
 
-**Live:** _Link folgt_ <!-- LIVE-LINK -->
+**Live:** [maikcoding.github.io/autobahn-live-map](https://maikcoding.github.io/autobahn-live-map/) · Beispiel: [nur die A7](https://maikcoding.github.io/autobahn-live-map/?road=A7)
 
 ## Was die Karte kann
 
