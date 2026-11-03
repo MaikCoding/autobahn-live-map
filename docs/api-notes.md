@@ -213,7 +213,9 @@ sind nicht leer.
   Plausibilitäts-Box. Ungültige Einträge werden gezählt und übersprungen.
 - Typen: `isBlocked`, `delayTimeValue`, `averageSpeed` sind Strings;
   `coordinate.lat`/`long` sind `number | string`; viele Felder sind optional.
-- Ein leerer Webcam-Dienst ist der Normalzustand und wird ehrlich angezeigt.
+- **Webcams sind in v1 gestrichen** (Entscheidung vom 2026-11-03): kein Layer,
+  kein Code, keine Detailansicht. Der Dienst ist seit 2022 leer, und eine andere
+  Bildquelle würde den Ansatz „nur Daten der Autobahn GmbH“ brechen.
 
 ## Methode
 
