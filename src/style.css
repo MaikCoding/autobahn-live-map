@@ -83,7 +83,7 @@ h1 {
 
 .status {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   margin-top: 12px;
 }
 
@@ -91,22 +91,56 @@ h1 {
   display: none;
 }
 
+.status-list {
+  display: grid;
+  gap: 2px;
+}
+
 .status-row {
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 4px 8px;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
   align-items: center;
 }
 
+.layer-toggle {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  min-height: 30px;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Visually hidden but focusable; the swatch next to it is the visible switch. */
+.layer-checkbox {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
 .swatch {
-  width: 10px;
-  height: 10px;
+  flex: none;
+  width: 12px;
+  height: 12px;
   margin: 0 2px;
   border-radius: 50%;
   background: var(--c);
   box-shadow:
     0 0 0 2px #fff,
     0 0 0 3.5px var(--c);
+  transition: background 0.15s;
+}
+
+.layer-checkbox:not(:checked) + .swatch {
+  background: #fff;
+}
+
+.layer-checkbox:focus-visible + .swatch {
+  outline: 2px solid var(--sign-blue);
+  outline-offset: 4px;
 }
 
 .status-label {
@@ -116,6 +150,38 @@ h1 {
 .status-count {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+.status-row.is-off .status-label {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.status-row.is-off .status-count {
+  opacity: 0.5;
+}
+
+.status-details {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 4px;
+  padding-bottom: 4px;
+}
+
+.status-details:empty {
+  display: none;
+}
+
+.status-meta {
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.status-meta:empty {
+  display: none;
 }
 
 .progress {
@@ -264,6 +330,60 @@ h1 {
   margin: 0;
   padding: 14px 20px;
   color: var(--muted);
+}
+
+.metrics {
+  display: flex;
+  gap: 10px;
+  padding: 14px 20px 0;
+}
+
+.metric {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--c) 10%, #fff);
+}
+
+.metric-value {
+  display: block;
+  color: color-mix(in srgb, var(--c) 80%, #000);
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.panel-section {
+  padding: 0 20px 6px;
+}
+
+.panel-section h3 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.amenities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.amenities li {
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12px;
 }
 
 .panel-foot {

@@ -17,6 +17,7 @@ export interface DatasetLayer {
   setItems(items: readonly MapItem[], options?: { partial?: boolean }): void;
   getItem(key: string): MapItem | undefined;
   setSelected(key: string | null): void;
+  setVisible(visible: boolean): void;
 }
 
 /** Below this zoom the clusters carry the overview and lines would only be noise. */
@@ -160,6 +161,13 @@ export async function addDatasetLayer(map: MapLibreMap, definition: LayerDefinit
     paint: { 'icon-opacity': ['case', ['get', 'future'], 0.55, 1] },
   });
 
+  const ownLayerIds = [
+    ...(definition.lines ? [`${id}-lines-selected`, `${id}-lines`] : []),
+    `${id}-clusters`,
+    `${id}-cluster-count`,
+    `${id}-selected`,
+    `${id}-points`,
+  ];
   let byKey = new Map<string, MapItem>();
   return {
     definition,
@@ -173,6 +181,9 @@ export async function addDatasetLayer(map: MapLibreMap, definition: LayerDefinit
     setSelected(key) {
       map.setFilter(`${id}-selected`, selectedFilter(key));
       if (definition.lines) map.setFilter(`${id}-lines-selected`, selectedFilter(key));
+    },
+    setVisible(visible) {
+      for (const layerId of ownLayerIds) map.setLayoutProperty(layerId, 'visibility', visible ? 'visible' : 'none');
     },
   };
 }

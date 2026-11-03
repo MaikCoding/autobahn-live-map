@@ -2,8 +2,13 @@ import { ApiError, fetchServiceItems } from '../api/client';
 import type { ServiceName } from '../api/types';
 import { normalizeItem, type MapItem } from './normalize';
 
-/** Browsers open about six connections per host anyway; the API showed no rate limit at this level. */
-const DEFAULT_CONCURRENCY = 6;
+/**
+ * Shared by all layers, so several layers loading at once still keep at most
+ * six requests in flight. Browsers open about six connections per host anyway,
+ * and the API showed no rate limit at this level.
+ */
+const MAX_PARALLEL_REQUESTS = 6;
+const schedule = createLimiter(MAX_PARALLEL_REQUESTS);
 
 export type RoadOutcome =
   | { road: string; state: 'ok'; count: number }
@@ -29,7 +34,6 @@ export interface ServiceData {
 }
 
 export interface LoadOptions {
-  concurrency?: number;
   signal?: AbortSignal;
   onProgress?: (progress: LoadProgress) => void;
 }
@@ -42,7 +46,7 @@ export function compareRoads(a: string, b: string): number {
 export async function loadService(
   service: ServiceName,
   roads: readonly string[],
-  { concurrency = DEFAULT_CONCURRENCY, signal, onProgress }: LoadOptions = {},
+  { signal, onProgress }: LoadOptions = {},
 ): Promise<ServiceData> {
   const items: MapItem[] = [];
   const seen = new Set<string>();
@@ -51,7 +55,7 @@ export async function loadService(
   let skippedNoCoordinate = 0;
   let failed = 0;
 
-  await forEachLimit(roads, concurrency, async (road) => {
+  const loadRoad = async (road: string): Promise<void> => {
     try {
       const entries = await fetchServiceItems(road, service, signal);
       let count = 0;
@@ -74,20 +78,34 @@ export async function loadService(
       outcomes.push({ road, state: 'error', message: error instanceof ApiError ? error.message : String(error) });
     }
     onProgress?.({ done: outcomes.length, total: roads.length, failed, items });
-  });
+  };
 
+  await Promise.all(roads.map((road) => schedule(() => loadRoad(road))));
   outcomes.sort((a, b) => compareRoads(a.road, b.road));
   return { service, items, outcomes, skippedInvalid, skippedNoCoordinate, loadedAt: new Date() };
 }
 
-async function forEachLimit<T extends {}>(
-  values: readonly T[],
-  limit: number,
-  task: (value: T) => Promise<void>,
-): Promise<void> {
-  const queue = [...values];
-  const worker = async (): Promise<void> => {
-    for (let value = queue.shift(); value !== undefined; value = queue.shift()) await task(value);
+/** Runs at most `limit` tasks at a time, in the order they were scheduled. */
+function createLimiter(limit: number): <T>(task: () => Promise<T>) => Promise<T> {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  const next = (): void => {
+    if (active >= limit) return;
+    const start = waiting.shift();
+    if (!start) return;
+    active++;
+    start();
   };
-  await Promise.all(Array.from({ length: Math.min(limit, queue.length) }, worker));
+  return (task) =>
+    new Promise((resolve, reject) => {
+      waiting.push(() => {
+        task()
+          .then(resolve, reject)
+          .finally(() => {
+            active--;
+            next();
+          });
+      });
+      next();
+    });
 }

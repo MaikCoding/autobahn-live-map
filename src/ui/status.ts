@@ -1,3 +1,4 @@
+import type { ServiceName } from '../api/types';
 import type { ServiceData } from '../data/loader';
 import type { LayerDefinition } from '../layers/definitions';
 import { h } from './dom';
@@ -8,18 +9,33 @@ const clock = new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-dig
 /** Failed roads listed by name before the note switches to "…". */
 const MAX_LISTED_ROADS = 6;
 
-export type LayerStatus =
+export type LayerState =
+  | { phase: 'idle' }
   | { phase: 'loading'; done: number; total: number; count: number }
   | { phase: 'done'; data: ServiceData; onRetry: () => void };
 
 export interface StatusView {
   setConnecting(): void;
   setFatal(message: string, onRetry: () => void): void;
-  setLayer(definition: LayerDefinition, status: LayerStatus): void;
+  setLayer(definition: LayerDefinition, state: LayerState, enabled: boolean): void;
 }
 
-export function createStatus(root: HTMLElement): StatusView {
-  const rows = new Map<string, HTMLElement>();
+interface Row {
+  element: HTMLElement;
+  checkbox: HTMLInputElement;
+  count: HTMLElement;
+  details: HTMLElement;
+}
+
+/** Layer list with switches; rows are updated in place so keyboard focus survives progress updates. */
+export function createStatus(
+  root: HTMLElement,
+  onToggle: (service: ServiceName, enabled: boolean) => void,
+): StatusView {
+  const rows = new Map<ServiceName, Row>();
+  const list = h('div', { class: 'status-list' });
+  const meta = h('p', { class: 'status-meta' });
+
   return {
     setConnecting() {
       rows.clear();
@@ -36,17 +52,86 @@ export function createStatus(root: HTMLElement): StatusView {
         ),
       );
     },
-    setLayer(definition, status) {
-      const row = renderRow(definition, status);
-      const existing = rows.get(definition.service);
-      if (existing) existing.replaceWith(row);
-      else {
-        if (rows.size === 0) root.replaceChildren();
-        root.append(row);
+    setLayer(definition, state, enabled) {
+      if (rows.size === 0) {
+        list.replaceChildren();
+        meta.textContent = '';
+        root.replaceChildren(list, meta);
       }
-      rows.set(definition.service, row);
+      let row = rows.get(definition.service);
+      if (!row) {
+        row = createRow(definition, onToggle);
+        rows.set(definition.service, row);
+        list.append(row.element);
+      }
+      updateRow(row, definition, state, enabled);
+      if (state.phase === 'done') {
+        meta.textContent = `${state.data.outcomes.length} Autobahnen · Stand ${clock.format(state.data.loadedAt)} Uhr`;
+      }
     },
   };
+}
+
+function createRow(definition: LayerDefinition, onToggle: (service: ServiceName, enabled: boolean) => void): Row {
+  const checkbox = h('input', { type: 'checkbox', class: 'layer-checkbox' });
+  checkbox.addEventListener('change', () => onToggle(definition.service, checkbox.checked));
+  const count = h('span', { class: 'status-count' });
+  const details = h('div', { class: 'status-details' });
+  const element = h(
+    'div',
+    { class: 'status-row' },
+    h(
+      'label',
+      { class: 'layer-toggle' },
+      checkbox,
+      h('span', { class: 'swatch', 'aria-hidden': 'true' }),
+      h('span', { class: 'status-label' }, definition.label),
+    ),
+    count,
+    details,
+  );
+  element.style.setProperty('--c', definition.color);
+  return { element, checkbox, count, details };
+}
+
+function updateRow(row: Row, definition: LayerDefinition, state: LayerState, enabled: boolean): void {
+  row.checkbox.checked = enabled;
+  row.element.classList.toggle('is-off', !enabled);
+
+  if (state.phase === 'idle') {
+    row.count.textContent = '';
+    row.count.title = '';
+    row.details.replaceChildren();
+    return;
+  }
+
+  if (state.phase === 'loading') {
+    row.count.textContent = numbers.format(state.count);
+    row.count.title = '';
+    const bar = h('span');
+    bar.style.width = `${(state.done / Math.max(state.total, 1)) * 100}%`;
+    row.details.replaceChildren(
+      h(
+        'div',
+        {
+          class: 'progress',
+          role: 'progressbar',
+          'aria-label': `${definition.label} werden geladen`,
+          'aria-valuemin': '0',
+          'aria-valuemax': String(state.total),
+          'aria-valuenow': String(state.done),
+        },
+        bar,
+      ),
+    );
+    return;
+  }
+
+  const { data } = state;
+  const withEntries = data.outcomes.filter((outcome) => outcome.state === 'ok').length;
+  row.count.textContent = numbers.format(data.items.length);
+  row.count.title = `${withEntries} von ${data.outcomes.length} Autobahnen mit Einträgen`;
+  row.details.replaceChildren(...notes(definition, data, state.onRetry));
 }
 
 function retryButton(onRetry: () => void): HTMLButtonElement {
@@ -55,54 +140,13 @@ function retryButton(onRetry: () => void): HTMLButtonElement {
   return button;
 }
 
-function renderRow(definition: LayerDefinition, status: LayerStatus): HTMLElement {
-  const count = status.phase === 'loading' ? status.count : status.data.items.length;
-  const row = h(
-    'div',
-    { class: 'status-row' },
-    h('span', { class: 'swatch', 'aria-hidden': 'true' }),
-    h('span', { class: 'status-label' }, definition.label),
-    h('span', { class: 'status-count' }, numbers.format(count)),
-  );
-  row.style.setProperty('--c', definition.color);
-
-  if (status.phase === 'loading') {
-    const bar = h('span');
-    bar.style.width = `${(status.done / Math.max(status.total, 1)) * 100}%`;
-    row.append(
-      h(
-        'div',
-        {
-          class: 'progress',
-          role: 'progressbar',
-          'aria-label': `${definition.label} werden geladen`,
-          'aria-valuemin': '0',
-          'aria-valuemax': String(status.total),
-          'aria-valuenow': String(status.done),
-        },
-        bar,
-      ),
-      h('p', { class: 'status-note' }, `Lade ${status.done} von ${status.total} Autobahnen …`),
-    );
-  } else {
-    row.append(...summarize(definition, status.data, status.onRetry));
-  }
-  return row;
-}
-
-function summarize(definition: LayerDefinition, data: ServiceData, onRetry: () => void): HTMLElement[] {
+/** Only exceptions get a line: an empty layer, skipped entries, unreachable roads. */
+function notes(definition: LayerDefinition, data: ServiceData, onRetry: () => void): HTMLElement[] {
   const failed = data.outcomes.filter((outcome) => outcome.state === 'error');
-  const withEntries = data.outcomes.filter((outcome) => outcome.state === 'ok').length;
-  const notes = [
-    h(
-      'p',
-      { class: 'status-note' },
-      `${withEntries} von ${data.outcomes.length} Autobahnen mit Einträgen · Stand ${clock.format(data.loadedAt)}`,
-    ),
-  ];
+  const result: HTMLElement[] = [];
 
   if (data.items.length === 0 && failed.length === 0) {
-    notes.push(h('p', { class: 'status-note' }, `Die API meldet derzeit keine ${definition.label}.`));
+    result.push(h('p', { class: 'status-note' }, `Die API meldet derzeit keine ${definition.label}.`));
   }
 
   const skipped = [
@@ -110,7 +154,7 @@ function summarize(definition: LayerDefinition, data: ServiceData, onRetry: () =
     data.skippedInvalid > 0 ? `${numbers.format(data.skippedInvalid)} unlesbar` : '',
   ].filter(Boolean);
   if (skipped.length > 0) {
-    notes.push(h('p', { class: 'status-note' }, `Ausgelassen: ${skipped.join(', ')}.`));
+    result.push(h('p', { class: 'status-note' }, `Ausgelassen: ${skipped.join(', ')}.`));
   }
 
   if (failed.length > 0) {
@@ -122,7 +166,7 @@ function summarize(definition: LayerDefinition, data: ServiceData, onRetry: () =
         : `${failed.length} ${failed.length === 1 ? 'Autobahn' : 'Autobahnen'} nicht erreichbar: ${listed}. `;
     const note = h('p', { class: 'status-note is-error' }, text, retryButton(onRetry));
     note.title = failed.map((outcome) => `${outcome.road}: ${outcome.message}`).join('\n');
-    notes.push(note);
+    result.push(note);
   }
-  return notes;
+  return result;
 }
