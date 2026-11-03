@@ -20,7 +20,15 @@
         </div>
         <button id="hud-toggle" class="hud-toggle" type="button" aria-expanded="false" aria-controls="status">Ebenen</button>
       </div>
-      <div id="filter" class="filter-host"></div>
+      <div class="hud-tools">
+        <div id="filter" class="filter-host"></div>
+        <button id="stats-button" class="stats-button" type="button" aria-pressed="false" aria-controls="panel">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <path d="M2.5 13.5h11M4.5 11V7M8 11V3.5M11.5 11V8.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+          <span>Statistik</span>
+        </button>
+      </div>
       <section id="status" class="status" aria-live="polite"></section>
     </header>
 

@@ -8,7 +8,10 @@ const ROAD_PREFIX = /^(A\d+[a-z]?)\s*\|\s*/;
 const numbers = new Intl.NumberFormat('de-DE');
 
 export interface Panel {
-  show(item: MapItem, definition: LayerDefinition): void;
+  /** `onBack` adds a link back to the view the item was opened from. */
+  show(item: MapItem, definition: LayerDefinition, onBack?: () => void): void;
+  /** Any other content: statistics, an autobahn summary. `keepScroll` for live updates of the same view. */
+  showView(content: HTMLElement[], color: string, options?: { onBack?: () => void; keepScroll?: boolean }): void;
   hide(): void;
 }
 
@@ -23,14 +26,20 @@ export function createPanel(
     if (event.key === 'Escape' && !root.hidden) onClose();
   });
 
+  const showView: Panel['showView'] = (content, color, { onBack, keepScroll = false } = {}) => {
+    const scrollTop = body.scrollTop;
+    root.style.setProperty('--c', color);
+    body.replaceChildren(...(onBack ? [backButton(onBack)] : []), ...content);
+    body.scrollTop = keepScroll ? scrollTop : 0;
+    root.hidden = false;
+    document.body.classList.add('has-panel');
+  };
+
   return {
-    show(item, definition) {
-      root.style.setProperty('--c', definition.color);
-      body.replaceChildren(...renderItem(item, definition));
-      body.scrollTop = 0;
-      root.hidden = false;
-      document.body.classList.add('has-panel');
+    show(item, definition, onBack) {
+      showView(renderItem(item, definition), definition.color, { onBack });
     },
+    showView,
     hide() {
       root.hidden = true;
       document.body.classList.remove('has-panel');
@@ -38,8 +47,14 @@ export function createPanel(
   };
 }
 
+function backButton(onBack: () => void): HTMLButtonElement {
+  const button = h('button', { class: 'panel-back', type: 'button' }, '← Zurück');
+  button.addEventListener('click', onBack);
+  return button;
+}
+
 function renderItem(item: MapItem, definition: LayerDefinition): HTMLElement[] {
-  const { road, name, subtitle } = describe(item, definition);
+  const { road, name, subtitle } = describeItem(item, definition);
   const variants = [item.displayType, item.trafficType ?? '']
     .map((value) => definition.variants[value])
     .filter((label): label is string => label !== undefined);
@@ -102,7 +117,8 @@ function renderAmenities(item: MapItem): HTMLElement | null {
   );
 }
 
-function describe(item: MapItem, definition: LayerDefinition): { road: string; name: string; subtitle: string } {
+/** Road, display name and secondary line of an entry, shared by the panel and the statistics. */
+export function describeItem(item: MapItem, definition: LayerDefinition): { road: string; name: string; subtitle: string } {
   const match = ROAD_PREFIX.exec(item.title);
   const road = match?.[1] ?? item.road;
   const rest = (match ? item.title.slice(match[0].length) : item.title).replaceAll(' | ', ' · ').trim();

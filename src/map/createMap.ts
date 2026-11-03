@@ -34,7 +34,7 @@ const DATA_ATTRIBUTION =
   'Verkehrsdaten © <a href="https://www.autobahn.de/" target="_blank" rel="noopener">Die Autobahn GmbH des Bundes</a>, aufbereitet';
 
 /** Keeps fitted content clear of the status card: beside it on wide screens, below it on phones. */
-export function viewPadding(): PaddingOptions {
+export function viewPadding(): Required<PaddingOptions> {
   const wide = window.innerWidth >= 900;
   return { top: wide ? 32 : 170, right: 32, bottom: wide ? 56 : 40, left: wide ? 370 : 16 };
 }

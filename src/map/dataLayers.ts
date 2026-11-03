@@ -1,5 +1,12 @@
 import type { FeatureCollection, LineString, Point } from 'geojson';
-import type { FilterSpecification, GeoJSONSource, Map as MapLibreMap, PointLike } from 'maplibre-gl';
+import type {
+  FilterSpecification,
+  GeoJSONSource,
+  Map as MapLibreMap,
+  MapGeoJSONFeature,
+  MapMouseEvent,
+  PointLike,
+} from 'maplibre-gl';
 import type { MapItem } from '../data/normalize';
 import type { LayerDefinition } from '../layers/definitions';
 import { addMarkerImage } from './markers';
@@ -188,26 +195,36 @@ export async function addDatasetLayer(map: MapLibreMap, definition: LayerDefinit
   };
 }
 
+export interface InteractionHandlers {
+  onSelect(key: string | null): void;
+  /** Lower-priority layers, such as the autobahn network; they only count where no marker is. */
+  fallbackLayerIds?: readonly string[];
+  onFallback?(feature: MapGeoJSONFeature, event: MapMouseEvent): void;
+}
+
 /** One click handler for all layers: clusters zoom in, items are selected, empty map deselects. */
 export function bindInteractions(
   map: MapLibreMap,
   layers: readonly DatasetLayer[],
-  onSelect: (key: string | null) => void,
+  { onSelect, fallbackLayerIds = [], onFallback }: InteractionHandlers,
 ): void {
-  const hitAt = (point: { x: number; y: number }) => {
+  const hitAt = (point: { x: number; y: number }, layerIds: readonly string[]) => {
     const box: [PointLike, PointLike] = [
       [point.x - HIT_TOLERANCE, point.y - HIT_TOLERANCE],
       [point.x + HIT_TOLERANCE, point.y + HIT_TOLERANCE],
     ];
-    const layerIds = layers.flatMap((layer) => layer.interactiveLayerIds).filter((id) => map.getLayer(id));
+    const present = layerIds.filter((id) => map.getLayer(id));
     // Topmost first, so markers win over the lines underneath.
-    return map.queryRenderedFeatures(box, { layers: layerIds })[0];
+    return present.length > 0 ? map.queryRenderedFeatures(box, { layers: present })[0] : undefined;
   };
+  const itemLayerIds = () => layers.flatMap((layer) => layer.interactiveLayerIds);
 
   map.on('click', (event) => {
-    const feature = hitAt(event.point);
+    const feature = hitAt(event.point, itemLayerIds());
     if (!feature) {
-      onSelect(null);
+      const fallback = hitAt(event.point, fallbackLayerIds);
+      if (fallback && onFallback) onFallback(fallback, event);
+      else onSelect(null);
       return;
     }
     const properties: Record<string, unknown> = feature.properties ?? {};
@@ -224,6 +241,7 @@ export function bindInteractions(
   });
 
   map.on('mousemove', (event) => {
-    map.getCanvas().style.cursor = hitAt(event.point) ? 'pointer' : '';
+    const hit = hitAt(event.point, itemLayerIds()) ?? hitAt(event.point, fallbackLayerIds);
+    map.getCanvas().style.cursor = hit ? 'pointer' : '';
   });
 }

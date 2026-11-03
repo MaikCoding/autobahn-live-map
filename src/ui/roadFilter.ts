@@ -40,7 +40,7 @@ export function createRoadFilter(root: HTMLElement, onChange: (roads: string[]) 
     id: 'road-filter',
     class: 'filter-input',
     type: 'search',
-    placeholder: 'Autobahn filtern, z. B. A3',
+    placeholder: 'Autobahn, z. B. A3',
     autocomplete: 'off',
     spellcheck: 'false',
     enterkeyhint: 'search',
