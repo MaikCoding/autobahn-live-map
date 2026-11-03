@@ -1,4 +1,11 @@
-import { AttributionControl, Map as MapLibreMap, NavigationControl, setWorkerUrl, type LngLatBoundsLike } from 'maplibre-gl';
+import {
+  AttributionControl,
+  Map as MapLibreMap,
+  NavigationControl,
+  setWorkerUrl,
+  type LngLatBoundsLike,
+  type PaddingOptions,
+} from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 
 // MapLibre locates its worker relative to its own module URL, which no longer
@@ -17,12 +24,18 @@ const GERMANY_BOUNDS: LngLatBoundsLike = [
 const DATA_ATTRIBUTION =
   'Verkehrsdaten © <a href="https://www.autobahn.de/" target="_blank" rel="noopener">Die Autobahn GmbH des Bundes</a>, aufbereitet';
 
+/** Keeps Germany clear of the status card: beside it on wide screens, below it on phones. */
+function initialPadding(): PaddingOptions {
+  const wide = window.innerWidth >= 900;
+  return { top: wide ? 32 : 110, right: 32, bottom: 40, left: wide ? 370 : 16 };
+}
+
 export function createMap(container: HTMLElement): MapLibreMap {
   const map = new MapLibreMap({
     container,
     style: BASEMAP_STYLE,
     bounds: GERMANY_BOUNDS,
-    fitBoundsOptions: { padding: 32 },
+    fitBoundsOptions: { padding: initialPadding() },
     attributionControl: false,
     dragRotate: false,
     pitchWithRotate: false,
