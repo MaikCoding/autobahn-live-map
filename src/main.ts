@@ -37,9 +37,18 @@ function errorMessage(error: unknown): string {
 }
 
 const urlState = readUrlState(LAYERS.map((definition) => definition.service));
-const map = createMap(byId('map'));
 const status = createStatus(byId('status'), (service, enabled) => setEnabled(service, enabled));
-const panel = createPanel(byId('panel'), byId('panel-body'), byId('panel-close'), () => select(null));
+const map = createMap(byId('map'), (message) =>
+  status.setNotice(`Kartenhintergrund nicht erreichbar (${message}). Die Daten erscheinen auf neutralem Grund.`),
+);
+const panelElement = byId('panel');
+const panel = createPanel(panelElement, byId('panel-body'), byId('panel-close'), () => select(null));
+
+const hud = byId('hud');
+const hudToggle = byId('hud-toggle');
+hudToggle.addEventListener('click', () => {
+  hudToggle.setAttribute('aria-expanded', String(hud.classList.toggle('is-expanded')));
+});
 const roadFilterView = createRoadFilter(byId('filter'), (roads) => setRoadFilter(roads));
 roadFilterView.setRoads(urlState.roads);
 
@@ -89,8 +98,26 @@ function select(key: string | null): void {
   }
   selectedKey = match ? key : null;
   for (const { layer } of entries) layer.setSelected(selectedKey);
-  if (match) panel.show(match.item, match.layer.definition);
-  else panel.hide();
+  if (match) {
+    panel.show(match.item, match.layer.definition);
+    reveal(match.item);
+  } else {
+    panel.hide();
+  }
+}
+
+/** Pans a selected item out from under the panel: the side panel on desktop, the bottom sheet on phones. */
+function reveal(item: MapItem): void {
+  const point = map.project(item.position);
+  const mapBox = map.getContainer().getBoundingClientRect();
+  const panelBox = panelElement.getBoundingClientRect();
+  const isBottomSheet = panelBox.left <= mapBox.left + 1;
+  const margin = 24;
+  if (isBottomSheet && point.y > panelBox.top - mapBox.top - margin) {
+    map.panTo(item.position, { offset: [0, -panelBox.height / 2], duration: 400 });
+  } else if (!isBottomSheet && point.x > panelBox.left - mapBox.left - margin) {
+    map.panTo(item.position, { offset: [-(mapBox.right - panelBox.left) / 2, 0], duration: 400 });
+  }
 }
 
 function setRoadFilter(roadIds: readonly string[]): void {

@@ -5,6 +5,7 @@ import {
   setWorkerUrl,
   type LngLatBoundsLike,
   type PaddingOptions,
+  type StyleSpecification,
 } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 
@@ -14,6 +15,14 @@ setWorkerUrl(workerUrl);
 
 /** OpenFreeMap needs no API key; its OSM attribution comes from the style's TileJSON. */
 const BASEMAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
+
+/** Plain background, so the traffic data stays usable when the basemap is unreachable. */
+const FALLBACK_STYLE: StyleSpecification = {
+  version: 8,
+  glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+  sources: {},
+  layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#e9ecef' } }],
+};
 
 const GERMANY_BOUNDS: LngLatBoundsLike = [
   [5.87, 47.27],
@@ -27,14 +36,14 @@ const DATA_ATTRIBUTION =
 /** Keeps fitted content clear of the status card: beside it on wide screens, below it on phones. */
 export function viewPadding(): PaddingOptions {
   const wide = window.innerWidth >= 900;
-  return { top: wide ? 32 : 170, right: 32, bottom: 40, left: wide ? 370 : 16 };
+  return { top: wide ? 32 : 170, right: 32, bottom: wide ? 56 : 40, left: wide ? 370 : 16 };
 }
 
 export function showGermany(map: MapLibreMap): void {
   map.fitBounds(GERMANY_BOUNDS, { padding: viewPadding(), duration: 800 });
 }
 
-export function createMap(container: HTMLElement): MapLibreMap {
+export function createMap(container: HTMLElement, onBasemapError: (message: string) => void): MapLibreMap {
   const map = new MapLibreMap({
     container,
     style: BASEMAP_STYLE,
@@ -48,5 +57,17 @@ export function createMap(container: HTMLElement): MapLibreMap {
   map.touchZoomRotate.disableRotation();
   map.addControl(new NavigationControl({ showCompass: false }), 'bottom-right');
   map.addControl(new AttributionControl({ compact: true, customAttribution: DATA_ATTRIBUTION }), 'bottom-right');
+
+  // Without a style the map never fires 'load', and no traffic data would appear either.
+  let styleSettled = false;
+  map.once('style.load', () => {
+    styleSettled = true;
+  });
+  map.on('error', ({ error }) => {
+    if (styleSettled) return;
+    styleSettled = true;
+    onBasemapError(error.message);
+    map.setStyle(FALLBACK_STYLE);
+  });
   return map;
 }

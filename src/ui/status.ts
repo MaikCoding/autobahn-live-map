@@ -25,6 +25,8 @@ export interface StatusView {
   setConnecting(): void;
   setFatal(message: string, onRetry: () => void): void;
   setLayer(definition: LayerDefinition, view: LayerView): void;
+  /** A problem outside the layers, e.g. a missing basemap. Stays until replaced. */
+  setNotice(message: string): void;
 }
 
 interface Row {
@@ -34,23 +36,33 @@ interface Row {
   details: HTMLElement;
 }
 
-/** Layer list with switches; rows are updated in place so keyboard focus survives progress updates. */
+/**
+ * Layer list with switches; rows are updated in place so keyboard focus
+ * survives progress updates. On phones the list collapses to `summary`.
+ */
 export function createStatus(
   root: HTMLElement,
   onToggle: (service: ServiceName, enabled: boolean) => void,
 ): StatusView {
   const rows = new Map<ServiceName, Row>();
+  const views = new Map<ServiceName, LayerView>();
+  const summary = h('div', { class: 'status-summary' });
   const list = h('div', { class: 'status-list' });
   const meta = h('p', { class: 'status-meta' });
+  const notice = h('p', { class: 'status-note is-error' });
+
+  const show = (...content: HTMLElement[]): void => root.replaceChildren(...content, notice);
 
   return {
     setConnecting() {
       rows.clear();
-      root.replaceChildren(h('p', { class: 'status-note' }, 'Verbinde mit der Autobahn-API …'));
+      views.clear();
+      show(h('p', { class: 'status-note' }, 'Verbinde mit der Autobahn-API …'));
     },
     setFatal(message, onRetry) {
       rows.clear();
-      root.replaceChildren(
+      views.clear();
+      show(
         h(
           'p',
           { class: 'status-note is-error' },
@@ -63,7 +75,7 @@ export function createStatus(
       if (rows.size === 0) {
         list.replaceChildren();
         meta.textContent = '';
-        root.replaceChildren(list, meta);
+        show(summary, list, meta);
       }
       let row = rows.get(definition.service);
       if (!row) {
@@ -71,11 +83,16 @@ export function createStatus(
         rows.set(definition.service, row);
         list.append(row.element);
       }
+      views.set(definition.service, view);
       updateRow(row, definition, view);
+      updateSummary(summary, [...views.values()]);
       if (view.state.phase === 'done') {
         const { outcomes, loadedAt } = view.state.data;
-        meta.textContent = `${outcomes.length} Autobahnen · Stand ${clock.format(loadedAt)} Uhr`;
+        meta.textContent = `${outcomes.length} Autobahnen · Stand ${clock.format(loadedAt)} Uhr · Daten: Die Autobahn GmbH des Bundes`;
       }
+    },
+    setNotice(message) {
+      notice.textContent = message;
     },
   };
 }
@@ -106,6 +123,23 @@ function countText(total: number, filteredCount: number | null): string {
   return filteredCount === null ? numbers.format(total) : `${numbers.format(filteredCount)} von ${numbers.format(total)}`;
 }
 
+function progressBar(done: number, total: number, label: string): HTMLElement {
+  const bar = h('span');
+  bar.style.width = `${(done / Math.max(total, 1)) * 100}%`;
+  return h(
+    'div',
+    {
+      class: 'progress',
+      role: 'progressbar',
+      'aria-label': label,
+      'aria-valuemin': '0',
+      'aria-valuemax': String(total),
+      'aria-valuenow': String(done),
+    },
+    bar,
+  );
+}
+
 function updateRow(row: Row, definition: LayerDefinition, { state, enabled, filteredCount }: LayerView): void {
   row.checkbox.checked = enabled;
   row.element.classList.toggle('is-off', !enabled);
@@ -120,22 +154,7 @@ function updateRow(row: Row, definition: LayerDefinition, { state, enabled, filt
   if (state.phase === 'loading') {
     row.count.textContent = countText(state.count, filteredCount);
     row.count.title = '';
-    const bar = h('span');
-    bar.style.width = `${(state.done / Math.max(state.total, 1)) * 100}%`;
-    row.details.replaceChildren(
-      h(
-        'div',
-        {
-          class: 'progress',
-          role: 'progressbar',
-          'aria-label': `${definition.label} werden geladen`,
-          'aria-valuemin': '0',
-          'aria-valuemax': String(state.total),
-          'aria-valuenow': String(state.done),
-        },
-        bar,
-      ),
-    );
+    row.details.replaceChildren(progressBar(state.done, state.total, `${definition.label} werden geladen`));
     return;
   }
 
@@ -144,6 +163,35 @@ function updateRow(row: Row, definition: LayerDefinition, { state, enabled, filt
   row.count.textContent = countText(data.items.length, filteredCount);
   row.count.title = `${withEntries} von ${data.outcomes.length} Autobahnen mit Einträgen`;
   row.details.replaceChildren(...notes(definition, data, state.onRetry));
+}
+
+/** One line for the collapsed phone layout: progress while loading, totals and failures after. */
+function updateSummary(summary: HTMLElement, views: readonly LayerView[]): void {
+  const enabled = views.filter((view) => view.enabled && view.state.phase !== 'idle');
+  let done = 0;
+  let total = 0;
+  let shown = 0;
+  let failed = 0;
+  for (const { state, filteredCount } of enabled) {
+    if (state.phase === 'loading') {
+      done += state.done;
+      total += state.total;
+      shown += filteredCount ?? state.count;
+    } else if (state.phase === 'done') {
+      shown += filteredCount ?? state.data.items.length;
+      failed += state.data.outcomes.filter((outcome) => outcome.state === 'error').length;
+    }
+  }
+
+  if (total > 0) {
+    summary.replaceChildren(progressBar(done, total, 'Daten werden geladen'), h('span', null, `Lade Daten … ${numbers.format(shown)} Einträge`));
+    return;
+  }
+  const layers = enabled.length === 1 ? '1 Ebene' : `${enabled.length} Ebenen`;
+  summary.replaceChildren(
+    h('span', null, `${layers} · ${numbers.format(shown)} Einträge`),
+    failed > 0 ? h('span', { class: 'is-error' }, ` · ${failed}× nicht erreichbar`) : '',
+  );
 }
 
 function retryButton(onRetry: () => void): HTMLButtonElement {

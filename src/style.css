@@ -81,6 +81,36 @@ h1 {
   font-size: 12px;
 }
 
+.hud-toggle {
+  display: none;
+  margin-left: auto;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hud-toggle::after {
+  content: " ▾";
+}
+
+.hud.is-expanded .hud-toggle::after {
+  content: " ▴";
+}
+
+.status-summary {
+  display: none;
+}
+
+.status-summary .is-error {
+  color: var(--danger);
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -453,6 +483,23 @@ body.has-panel .maplibregl-ctrl-bottom-right {
 
   .brand-sub {
     display: none;
+  }
+
+  .hud-toggle {
+    display: inline-block;
+  }
+
+  /* Collapsed by default on phones: the summary keeps loading state and failures visible. */
+  .hud:not(.is-expanded) .status-list,
+  .hud:not(.is-expanded) .status-meta {
+    display: none;
+  }
+
+  .hud:not(.is-expanded) .status-summary {
+    display: grid;
+    gap: 4px;
+    color: var(--muted);
+    font-size: 12px;
   }
 
   .panel {
