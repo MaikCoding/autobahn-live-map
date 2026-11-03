@@ -14,10 +14,17 @@ export type LayerState =
   | { phase: 'loading'; done: number; total: number; count: number }
   | { phase: 'done'; data: ServiceData; onRetry: () => void };
 
+export interface LayerView {
+  state: LayerState;
+  enabled: boolean;
+  /** Entries left after the road filter; null without a filter. */
+  filteredCount: number | null;
+}
+
 export interface StatusView {
   setConnecting(): void;
   setFatal(message: string, onRetry: () => void): void;
-  setLayer(definition: LayerDefinition, state: LayerState, enabled: boolean): void;
+  setLayer(definition: LayerDefinition, view: LayerView): void;
 }
 
 interface Row {
@@ -52,7 +59,7 @@ export function createStatus(
         ),
       );
     },
-    setLayer(definition, state, enabled) {
+    setLayer(definition, view) {
       if (rows.size === 0) {
         list.replaceChildren();
         meta.textContent = '';
@@ -64,9 +71,10 @@ export function createStatus(
         rows.set(definition.service, row);
         list.append(row.element);
       }
-      updateRow(row, definition, state, enabled);
-      if (state.phase === 'done') {
-        meta.textContent = `${state.data.outcomes.length} Autobahnen · Stand ${clock.format(state.data.loadedAt)} Uhr`;
+      updateRow(row, definition, view);
+      if (view.state.phase === 'done') {
+        const { outcomes, loadedAt } = view.state.data;
+        meta.textContent = `${outcomes.length} Autobahnen · Stand ${clock.format(loadedAt)} Uhr`;
       }
     },
   };
@@ -94,7 +102,11 @@ function createRow(definition: LayerDefinition, onToggle: (service: ServiceName,
   return { element, checkbox, count, details };
 }
 
-function updateRow(row: Row, definition: LayerDefinition, state: LayerState, enabled: boolean): void {
+function countText(total: number, filteredCount: number | null): string {
+  return filteredCount === null ? numbers.format(total) : `${numbers.format(filteredCount)} von ${numbers.format(total)}`;
+}
+
+function updateRow(row: Row, definition: LayerDefinition, { state, enabled, filteredCount }: LayerView): void {
   row.checkbox.checked = enabled;
   row.element.classList.toggle('is-off', !enabled);
 
@@ -106,7 +118,7 @@ function updateRow(row: Row, definition: LayerDefinition, state: LayerState, ena
   }
 
   if (state.phase === 'loading') {
-    row.count.textContent = numbers.format(state.count);
+    row.count.textContent = countText(state.count, filteredCount);
     row.count.title = '';
     const bar = h('span');
     bar.style.width = `${(state.done / Math.max(state.total, 1)) * 100}%`;
@@ -129,7 +141,7 @@ function updateRow(row: Row, definition: LayerDefinition, state: LayerState, ena
 
   const { data } = state;
   const withEntries = data.outcomes.filter((outcome) => outcome.state === 'ok').length;
-  row.count.textContent = numbers.format(data.items.length);
+  row.count.textContent = countText(data.items.length, filteredCount);
   row.count.title = `${withEntries} von ${data.outcomes.length} Autobahnen mit Einträgen`;
   row.details.replaceChildren(...notes(definition, data, state.onRetry));
 }

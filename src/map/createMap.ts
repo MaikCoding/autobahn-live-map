@@ -24,10 +24,14 @@ const GERMANY_BOUNDS: LngLatBoundsLike = [
 const DATA_ATTRIBUTION =
   'Verkehrsdaten © <a href="https://www.autobahn.de/" target="_blank" rel="noopener">Die Autobahn GmbH des Bundes</a>, aufbereitet';
 
-/** Keeps Germany clear of the status card: beside it on wide screens, below it on phones. */
-function initialPadding(): PaddingOptions {
+/** Keeps fitted content clear of the status card: beside it on wide screens, below it on phones. */
+export function viewPadding(): PaddingOptions {
   const wide = window.innerWidth >= 900;
-  return { top: wide ? 32 : 110, right: 32, bottom: 40, left: wide ? 370 : 16 };
+  return { top: wide ? 32 : 170, right: 32, bottom: 40, left: wide ? 370 : 16 };
+}
+
+export function showGermany(map: MapLibreMap): void {
+  map.fitBounds(GERMANY_BOUNDS, { padding: viewPadding(), duration: 800 });
 }
 
 export function createMap(container: HTMLElement): MapLibreMap {
@@ -35,7 +39,7 @@ export function createMap(container: HTMLElement): MapLibreMap {
     container,
     style: BASEMAP_STYLE,
     bounds: GERMANY_BOUNDS,
-    fitBoundsOptions: { padding: initialPadding() },
+    fitBoundsOptions: { padding: viewPadding() },
     attributionControl: false,
     dragRotate: false,
     pitchWithRotate: false,
